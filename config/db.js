@@ -1,8 +1,7 @@
 const { Pool } = require("pg")
 
 const pool = new Pool({
-  //updated connection string
-    connectionString: "postgresql://arnold:mYBORE1wuPaNu3JwcIh7ALT2OwOpDfG1@dpg-d4dgjtvpm1nc73daoclg-a.oregon-postgres.render.com/web_tech_students",
+    connectionString: "postgresql://roddy:2PaXKOuM8YDge96y5FI97QyYqblyt43W@dpg-d4jqj63uibrs73f1u0f0-a.oregon-postgres.render.com/student_db_o49n",
     ssl: {
         require: true,
         rejectUnauthorized: false,   
