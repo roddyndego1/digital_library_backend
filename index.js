@@ -431,17 +431,16 @@ app.get("/my-borrows", auth, async (req, res) => {
     const userId = req.user.id;
 
     const borrowHistory = await pool.query(
-      `SELECT * FROM borrow_records
-       WHERE user_id = $1
-       ORDER BY borrow_date DESC`,
+      `SELECT br.*, b.title as book_title, b.author as book_author
+       FROM borrow_records br
+       JOIN books b ON br.book_id = b.id
+       WHERE br.user_id = $1
+       ORDER BY br.borrow_date DESC`,
       [userId]
     );
 
-    res.json({
-      message: "Here's your borrowing history:",
-      borrows: borrowHistory.rows,
-      total: borrowHistory.rows.length
-    });
+    // Return array format for frontend compatibility
+    res.json(borrowHistory.rows);
 
   } catch (error) {
     res.status(500).json({ 
@@ -451,6 +450,93 @@ app.get("/my-borrows", auth, async (req, res) => {
   }
 });
 
+// Admin: Get all borrow records
+app.get("/admin/all-borrows", auth, adminOnly, async (req, res) => {
+  try {
+    const borrowHistory = await pool.query(
+      `SELECT br.*, 
+              b.title as book_title, 
+              b.author as book_author,
+              u.name as user_name,
+              u.email as user_email
+       FROM borrow_records br
+       JOIN books b ON br.book_id = b.id
+       JOIN users u ON br.user_id = u.id
+       ORDER BY br.borrow_date DESC`
+    );
+
+    res.json(borrowHistory.rows);
+
+  } catch (error) {
+    res.status(500).json({ 
+      message: "Unable to retrieve borrow records. Please try again later.",
+      error: error.message 
+    });
+  }
+});
+
+// Admin: Get all users
+app.get("/admin/users", auth, adminOnly, async (req, res) => {
+  try {
+    const users = await pool.query(
+      `SELECT id, email, name, role, created_at
+       FROM users
+       ORDER BY created_at DESC`
+    );
+
+    res.json(users.rows);
+
+  } catch (error) {
+    res.status(500).json({ 
+      message: "Unable to retrieve users. Please try again later.",
+      error: error.message 
+    });
+  }
+});
+
+// Return book by borrow record ID (for frontend compatibility)
+app.post("/return-borrow/:borrowId", auth, async (req, res) => {
+  try {
+    const borrowId = req.params.borrowId;
+    const userId = req.user.id;
+
+    const activeBorrow = await pool.query(
+      `SELECT * FROM borrow_records
+       WHERE id = $1 AND user_id = $2 AND status = 'borrowed'`,
+      [borrowId, userId]
+    );
+
+    if (activeBorrow.rows.length === 0) {
+      return res.status(404).json({ 
+        message: "No active borrow record found. It may have already been returned." 
+      });
+    }
+
+    const bookId = activeBorrow.rows[0].book_id;
+
+    await pool.query(
+      `UPDATE borrow_records
+       SET return_date = NOW(), status = 'returned'
+       WHERE id = $1 AND status = 'borrowed'`,
+      [borrowId]
+    );
+
+    await pool.query(
+      "UPDATE books SET available_copies = available_copies + 1 WHERE id = $1",
+      [bookId]
+    );
+
+    res.json({ 
+      message: "Thank you for returning the book! We hope you enjoyed reading it." 
+    });
+
+  } catch (error) {
+    res.status(500).json({ 
+      message: "Unable to process your return request. Please try again later.",
+      error: error.message 
+    });
+  }
+});
 
 app.get("/", (req, res) => {
   res.send("Backend is Running");
