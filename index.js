@@ -5,9 +5,8 @@ const pool = require("./config/db");
 require("dotenv").config();
 
 const app = express();
-
 app.use(cors());
-app.use(express.json()); 
+app.use(express.json());
 
 
 app.get("/test-db", async (req, res) => {
@@ -34,13 +33,17 @@ app.get("/test-db", async (req, res) => {
 
 
 function generateToken(user) {
+  const secret = process.env.JWT_SECRET || 'default-secret-key-change-in-production';
+  if (!secret || secret === 'default-secret-key-change-in-production') {
+    console.warn('Warning: Using default JWT secret. Set JWT_SECRET in environment variables for production.');
+  }
   return jwt.sign(
     {
       id: user.id,
       email: user.email,
       role: user.role
     },
-    process.env.JWT_SECRET,
+    secret,
     { expiresIn: "7d" }
   );
 }
@@ -56,11 +59,19 @@ function auth(req, res, next) {
 
   const token = authHeader.split(" ")[1];
 
+  if (!token) {
+    return res.status(401).json({ 
+      message: "Authentication required. Please provide a valid token." 
+    });
+  }
+
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-  req.user = decoded; 
+    const secret = process.env.JWT_SECRET || 'default-secret-key-change-in-production';
+    const decoded = jwt.verify(token, secret);
+    req.user = decoded; 
     next();
   } catch (error) {
+    console.error('Token verification error:', error.message);
     return res.status(403).json({ 
       message: "Invalid or expired token. Please login again." 
     });
@@ -80,6 +91,28 @@ function adminOnly(req, res, next) {
 app.post("/register", async (req, res) => {
   try {
     const { email, password, name } = req.body;
+
+    // Validate input
+    if (!email || !password || !name) {
+      return res.status(400).json({ 
+        message: "All fields are required: email, password, and name." 
+      });
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ 
+        message: "Please provide a valid email address." 
+      });
+    }
+
+    // Validate password length
+    if (password.length < 3) {
+      return res.status(400).json({ 
+        message: "Password must be at least 3 characters long." 
+      });
+    }
 
     const existingUser = await pool.query(
       "SELECT * FROM users WHERE email = $1",
@@ -105,6 +138,7 @@ app.post("/register", async (req, res) => {
     });
 
   } catch (error) {
+    console.error('Registration error:', error);
     res.status(500).json({ 
       message: "Something went wrong during registration. Please try again.",
       error: error.message 
@@ -117,10 +151,34 @@ app.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    const userResult = await pool.query(
-      "SELECT * FROM users WHERE email = $1",
-      [email]
-    );
+    // Validate input
+    if (!email || !password) {
+      return res.status(400).json({ 
+        message: "Email and password are required." 
+      });
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ 
+        message: "Please provide a valid email address." 
+      });
+    }
+
+    let userResult;
+    try {
+      userResult = await pool.query(
+        "SELECT * FROM users WHERE email = $1",
+        [email]
+      );
+    } catch (dbError) {
+      console.error('Database query error:', dbError);
+      return res.status(500).json({ 
+        message: "Database error. Please try again later.",
+        error: dbError.message 
+      });
+    }
 
     const user = userResult.rows[0];
 
@@ -136,16 +194,27 @@ app.post("/login", async (req, res) => {
       });
     }
 
-    const token = generateToken(user);
+    try {
+      const token = generateToken(user);
 
-    res.json({
-      message: "Login successful! Welcome back.",
-      token,
-      role: user.role,
-      userId: user.id
-    });
+      res.json({
+        message: "Login successful! Welcome back.",
+        token,
+        role: user.role,
+        userId: user.id,
+        name: user.name,
+        email: user.email
+      });
+    } catch (tokenError) {
+      console.error('Token generation error:', tokenError);
+      res.status(500).json({ 
+        message: "Unable to generate authentication token. Please try again later.",
+        error: tokenError.message 
+      });
+    }
 
   } catch (error) {
+    console.error('Login error:', error);
     res.status(500).json({ 
       message: "Unable to process login request. Please try again later.",
       error: error.message 
