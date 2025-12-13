@@ -1,17 +1,13 @@
-// Database connection configuration
+
 const { Pool } = require("pg");
 require("dotenv").config();
 
-/**
- * Create a PostgreSQL connection pool
- * This manages multiple database connections efficiently
- */
-const pool = new Pool({
+
+const librarydbpool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: {
-    rejectUnauthorized: false // Required for cloud databases like Render
+    rejectUnauthorized: false 
   }
 });
 
-// Export the pool for use in other files
-module.exports = pool;
+module.exports = librarydbpool;
