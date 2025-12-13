@@ -1,4 +1,3 @@
-
 const express = require("express");
 const cors = require("cors");
 const jwt = require("jsonwebtoken");
@@ -10,9 +9,7 @@ const app = express();
 app.use(cors());
 app.use(express.json()); 
 
-/**
- * Test endpoint to verify database connection
- */
+
 app.get("/test-db", async (req, res) => {
     try {
         const dbResult = await pool.query("SELECT NOW() as time");
@@ -84,7 +81,6 @@ app.post("/register", async (req, res) => {
   try {
     const { email, password, name } = req.body;
 
-    // Check if email is already registered
     const existingUser = await pool.query(
       "SELECT * FROM users WHERE email = $1",
       [email]
@@ -116,9 +112,7 @@ app.post("/register", async (req, res) => {
   }
 });
 
-/**
-Login with email and password
- */
+
 app.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -159,9 +153,7 @@ app.post("/login", async (req, res) => {
   }
 });
 
-/**
-Fetch books
- */
+//Fetch books
 app.get("/books", async (req, res) => {
   try {
     const booksResult = await pool.query(

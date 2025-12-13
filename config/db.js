@@ -1,13 +1,15 @@
+const { Pool } = require("pg")
 
-const { Pool } = require("pg");
-require("dotenv").config();
+const pool = new Pool({
+  //updated connection string
+    connectionString: "postgresql://arnold:mYBORE1wuPaNu3JwcIh7ALT2OwOpDfG1@dpg-d4dgjtvpm1nc73daoclg-a.oregon-postgres.render.com/web_tech_students",
+    ssl: {
+        require: true,
+        rejectUnauthorized: false,   
+    }
+})
 
-
-const librarydbpool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false 
-  }
-});
-
-module.exports = librarydbpool;
+pool.on("connect", () => {
+    console.log("Connected to Postgres Database")
+})
+module.exports = pool;
