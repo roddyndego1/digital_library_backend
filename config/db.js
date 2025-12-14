@@ -1,7 +1,7 @@
-const { Pool } = require("pg")
+const { Pool } = require('pg')
 require('dotenv').config()
 
-const connectionString = process.env.DATABASE_URL 
+const connectionString = process.env.DATABASE_URL
 
 const poolConfig = { connectionString }
 if (process.env.PGSSLMODE === 'require') {
@@ -10,8 +10,8 @@ if (process.env.PGSSLMODE === 'require') {
 
 const pool = new Pool(poolConfig)
 
-pool.on("connect", () => {
-    console.log("Connected to Postgres Database")
+pool.on('connect', () => {
+    console.log('Connected to Postgres Database')
 })
 
-module.exports = pool;
+module.exports = pool
