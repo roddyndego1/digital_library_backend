@@ -429,7 +429,7 @@ app.post("/borrow/:bookId", auth, async (req, res) => {
 
     const book = bookResult.rows[0];
     console.log('Selected book for borrow:', book);
-
+    //book availability check
     const available = Number(book.available_copies || 0);
     if (available < 1) {
       await client.query('ROLLBACK');
@@ -463,11 +463,12 @@ app.post("/borrow/:bookId", auth, async (req, res) => {
   } catch (error) {
     try {
       await client.query('ROLLBACK');
-    } catch (rbErr) {
-      console.error('Rollback error after borrow failure:', rbErr);
+    } catch (rbError) {
+      console.error('Rollback error after borrow failure:', rbError);
+      res.status(400).json({ message: 'Unable to process your borrow request. Please try again later.', error: rbError.message });
+      return;
     }
     console.error('Borrow endpoint error (transaction):', error);
-    res.status(500).json({ message: 'Unable to process your borrow request. Please try again later.', error: error.message });
   } finally {
     client.release();
   }
