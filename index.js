@@ -396,59 +396,80 @@ app.delete("/books/:id", auth, adminOnly, async (req, res) => {
   }
 });
 
-
 // Borrow book
 app.post("/borrow/:bookId", auth, async (req, res) => {
-  try {
-    const bookId = req.params.bookId;
-    const userId = req.user.id;
+  // Defensive validation + transactional borrow to avoid race conditions
+  const rawBookId = req.params.bookId;
+  const parsedBookId = parseInt(rawBookId, 10);
+  const parsedUserId = parseInt(req.user && req.user.id, 10);
 
-    // Check if book exists
-    const bookResult = await pool.query(
-      "SELECT * FROM books WHERE id = $1", 
-      [bookId]
+  if (Number.isNaN(parsedBookId) || parsedBookId <= 0) {
+    return res.status(400).json({ message: 'Invalid book id provided.' });
+  }
+
+  if (Number.isNaN(parsedUserId) || parsedUserId <= 0) {
+    return res.status(401).json({ message: 'Invalid user. Authentication failed.' });
+  }
+
+  const client = await pool.connect();
+  try {
+    console.log('Borrow attempt:', { userId: parsedUserId, bookId: parsedBookId });
+    await client.query('BEGIN');
+
+    // Lock the book row to prevent concurrent updates
+    const bookResult = await client.query(
+      'SELECT * FROM books WHERE id = $1 FOR UPDATE',
+      [parsedBookId]
     );
 
     if (bookResult.rows.length === 0) {
-      return res.status(404).json({ 
-        message: "Sorry, we couldn't find that book in our library." 
-      });
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: "Sorry, we couldn't find that book in our library." });
     }
 
     const book = bookResult.rows[0];
+    console.log('Selected book for borrow:', book);
 
-    if (book.available_copies < 1) {
-      return res.status(400).json({ 
-        message: "Sorry, all copies of this book are currently checked out. Please try again later." 
-      });
+    const available = Number(book.available_copies || 0);
+    if (available < 1) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ message: 'Sorry, all copies of this book are currently checked out.' });
     }
 
     const dueDate = new Date();
     dueDate.setDate(dueDate.getDate() + 14);
 
-    const borrowRecord = await pool.query(
+    const borrowInsert = await client.query(
       `INSERT INTO borrow_records
        (user_id, book_id, borrow_date, due_date, status)
        VALUES ($1, $2, NOW(), $3, 'borrowed')
        RETURNING *`,
-      [userId, bookId, dueDate]
+      [parsedUserId, parsedBookId, dueDate]
     );
 
-    await pool.query(
-      "UPDATE books SET available_copies = available_copies - 1 WHERE id = $1",
-      [bookId]
+    console.log('Inserted borrow record:', borrowInsert.rows[0]);
+
+    await client.query(
+      'UPDATE books SET available_copies = available_copies - 1 WHERE id = $1',
+      [parsedBookId]
     );
+
+    await client.query('COMMIT');
 
     res.status(201).json({
-      message: "Book borrowed successfully! Please return it by the due date.",
-      borrowRecord: borrowRecord.rows[0]
+      message: 'Book borrowed successfully! Please return it by the due date.',
+      borrowRecord: borrowInsert.rows[0]
     });
-
   } catch (error) {
-    res.status(500).json({ 
-      message: "Unable to process your borrow request. Please try again later.",
-      error: error.message 
-    });
+    try {
+      await client.query('ROLLBACK');
+    } catch (rbErr) {
+      console.error('Rollback error after borrow failure:', rbErr);
+    }
+    console.error('Borrow endpoint error (transaction):', error);
+    res.status(500).json({ message: 'Unable to process your borrow request. Please try again later.', error: error.message });
+  } finally {
+    client.release();
   }
 });
 
