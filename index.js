@@ -33,8 +33,8 @@ app.get("/test-db", async (req, res) => {
 
 
 function generateToken(user) {
-  const secret = process.env.JWT_SECRET || 'default-secret-key-change-in-production';
-  if (!secret || secret === 'default-secret-key-change-in-production') {
+  const secret = process.env.JWT_SECRET;
+  if (!secret || secret === process.env.JWT_SECRET) {
     console.warn('Warning: Using default JWT secret. Set JWT_SECRET in environment variables for production.');
   }
   return jwt.sign(
@@ -66,7 +66,7 @@ function auth(req, res, next) {
   }
 
   try {
-    const secret = process.env.JWT_SECRET || 'default-secret-key-change-in-production';
+    const secret = process.env.JWT_SECRET;
     const decoded = jwt.verify(token, secret);
     req.user = decoded; 
     next();
